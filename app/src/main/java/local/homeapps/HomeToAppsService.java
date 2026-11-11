@@ -51,6 +51,8 @@ public class HomeToAppsService extends AccessibilityService {
     /** Tries to wait before clicking, so a settings page that is still drawing gets the chance to show. */
     private static final int SETTLE_TRIES = 2;
     private static final long DEBOUNCE_MS = 1500;
+    /** After clicking the apps button: long enough for the launcher to enlarge it, short of the grid opening. */
+    private static final long FOCUS_BACK_MS = 250;
 
     /** Set by HomeShortcutActivity: Amazon's home opening on request is not a Home press. */
     static volatile long suppressUntil;
@@ -64,6 +66,11 @@ public class HomeToAppsService extends AccessibilityService {
     private boolean fallback;
     /** A check is scheduled; another trigger while it runs does not start a second one. */
     private boolean pending;
+    /**
+     * What had focus on Amazon's home before the apps button was clicked, while focus is still left on the
+     * button; null once handed back.
+     */
+    private AccessibilityNodeInfo focusToRestore;
 
     private HandlerThread coverThread;
     private Handler coverHandler;
@@ -170,7 +177,10 @@ public class HomeToAppsService extends AccessibilityService {
         }
         if (!LAUNCHER.equals(pkg) || cls == null || !cls.toString().startsWith(HOME_CLASS)) return;
         // Back from a settings screen lands on the settings page; Amazon's home opened on request stays.
-        if (SystemClock.uptimeMillis() < suppressUntil || previous.startsWith(SETTINGS_PACKAGE)) return;
+        if (SystemClock.uptimeMillis() < suppressUntil || previous.startsWith(SETTINGS_PACKAGE)) {
+            restoreFocus();
+            return;
+        }
         // Amazon's home can report itself again right after a redirect; that is not a new Home press, and
         // covering it would leave a dark screen with no redirect behind it.
         if (SystemClock.uptimeMillis() - lastRedirect < DEBOUNCE_MS) return;
@@ -203,10 +213,33 @@ public class HomeToAppsService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return false;
         List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByViewId(APPS_BUTTON);
+        AccessibilityNodeInfo before = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
         for (AccessibilityNodeInfo node : nodes) {
-            if (node.isVisibleToUser() && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+            if (!node.isVisibleToUser()) continue;
+            // The launcher enlarges the button on click and shrinks it only when focus leaves it, so a bare
+            // click left it enlarged on Amazon's home. Focus it as the remote would, click, and once the click
+            // has enlarged it, hand focus back (behind the cover) so it shrinks and Amazon's home keeps its
+            // own focus. Done right away, the hand-back sometimes beat the enlarging. It only reaches Amazon's
+            // home while that is still the active window; otherwise restoreFocus() does it on the next visit.
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+            if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                if (before != null && !before.equals(node)) {
+                    focusToRestore = before;
+                    handler.postDelayed(() -> {
+                        if (before.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) focusToRestore = null;
+                    }, FOCUS_BACK_MS);
+                }
+                return true;
+            }
         }
         return false;
+    }
+
+    /** Amazon's home is staying in front: take focus off the apps button if a redirect left it there. */
+    private void restoreFocus() {
+        AccessibilityNodeInfo target = focusToRestore;
+        focusToRestore = null;
+        if (target != null && target.refresh()) target.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
     }
 
     private void startGrid() {
