@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Home → Meus apps</string>
+    <string name="home_label">Início</string>
+    <string name="service_description">Quando a tela inicial da Amazon aparece, abre a grade \"Seus apps e jogos\". Desligue aqui para voltar ao normal.</string>
+</resources>

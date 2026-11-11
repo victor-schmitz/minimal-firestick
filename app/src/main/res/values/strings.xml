@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Home → Meus apps</string>
-    <string name="home_label">Início</string>
-    <string name="service_description">Quando a tela inicial da Amazon aparece, abre a grade \"Seus apps e jogos\". Desligue aqui para voltar ao normal.</string>
+    <string name="app_name">Home → My apps</string>
+    <string name="home_label">Amazon Home</string>
+    <string name="service_description">When Amazon\'s home screen shows up, opens the \"Your Apps &amp; Games\" grid instead. Turn it off here to go back to normal.</string>
 </resources>

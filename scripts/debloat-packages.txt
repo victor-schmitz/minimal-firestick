@@ -1,0 +1,51 @@
+# Packages disabled by debloat.sh. Delete a line to keep that app on.
+
+# Telemetry and metrics
+com.amazon.client.metrics.api
+com.amazon.dp.logger
+com.amazon.perfcollection
+com.amazon.tv.fw.metrics
+com.amazon.wirelessmetrics.service
+com.amazon.tv.developer.dataservice
+
+# Ad ID, ads and content recognition
+com.amazon.hybridadidservice
+com.amazon.tv.acr
+com.amazon.sneakpeek
+
+# Tutorials, release notes and pop-up notices
+com.amazon.storm.lightning.tutorial
+com.amazon.tmm.tutorial
+com.amazon.tv.releasenotes
+com.amazon.systemnotices
+com.amazon.uxnotification
+com.amazon.tv.easyupgrade
+
+# Alexa extras and multi-room audio
+com.amazon.alexa.externalmediaplayer.fireos
+com.amazon.audiohome
+com.amazon.tv.alexaalerts
+com.amazon.tv.alexanotifications
+com.amazon.wha.mediabrowserservice
+com.amazon.whad
+com.amazon.whasettings
+
+# Live TV tab (antenna/channel guide); keep it if you use Live TV
+com.amazon.tv.livetv
+
+# Wi-Fi password sync and setup of other Amazon devices
+com.amazon.wifilocker
+com.amazon.whisperjoin.middleware.np
+
+# Other
+com.amazon.aca
+com.amazon.franktvinput
+com.amazon.kso.blackbird
+com.amazon.livedeviceservice
+com.amazon.privacypassservice
+com.amazon.ceviche
+com.amazon.firebat
+com.amazon.naatyam
+com.amazon.providers.contentsupport
+com.amazon.tv.website_launcher
+com.android.nfc
