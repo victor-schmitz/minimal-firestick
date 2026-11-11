@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- No INTERNET permission: the service only watches Amazon's home window and opens the apps grid. -->
+    <!-- The apps grid shows the application label under the tile, so it names the tile; the service keeps
+         its own label in accessibility settings. -->
     <application
-        android:label="@string/app_name"
+        android:label="@string/home_label"
         android:icon="@mipmap/ic_home"
         android:banner="@drawable/banner_home"
         android:allowBackup="false">

@@ -42,15 +42,19 @@ There are no unit tests. The behaviour depends on Amazon's launcher, so verifica
 
 Each of these was found the hard way. Do not "simplify" them away without re-testing on a device.
 
-1. **Third-party apps cannot see Home.** Fire OS does not deliver `KEYCODE_HOME` to accessibility services, does not send `ACTION_CLOSE_SYSTEM_DIALOGS` "homekey" to third-party apps, and ignores third-party `CATEGORY_HOME` launchers. The only usable signal is `TYPE_WINDOW_STATE_CHANGED` for `com.amazon.tv.launcher` with a class name that starts with `com.amazon.tv.launcher.ui.HomeActivity`. On Fire OS 7 the class is `HomeActivity_vNext`, which is why the code uses `startsWith`.
+1. **Third-party apps cannot see the Home key itself.** Fire OS does not deliver `KEYCODE_HOME` to accessibility services, does not send `ACTION_CLOSE_SYSTEM_DIALOGS` "homekey" to third-party apps, and ignores third-party `CATEGORY_HOME` launchers. Two signals are usable:
+   - `TYPE_WINDOW_STATE_CHANGED` for `com.amazon.tv.launcher` with a class name that starts with `com.amazon.tv.launcher.ui.HomeActivity`. On Fire OS 7 the class is `HomeActivity_vNext`, which is why the code uses `startsWith`.
+   - The `com.amazon.tv.launcher.HOME_PRESSED` broadcast. `HomeActivity_vNext.onNewIntent` calls `goHome()` for every Home intent, and `goHome()` sends this broadcast with no permission, so a receiver registered at runtime gets it. Credit to [FireFrame](https://github.com/dyascj/FireFrame) for finding it. It arrives before the window event, and it is the only signal when Home is pressed while Amazon's home is already in front (see fact 3).
 2. **Starting an activity right after Home is delayed about 5 seconds.** This is Android's app-switch protection (`stopAppSwitches`, `APP_SWITCH_DELAY_TIME`). A plain `startActivity` from the service lands about 5 seconds late. Clicking the launcher's own button (`com.amazon.tv.launcher:id/nav_bar_app_overflow`) through `AccessibilityNodeInfo.ACTION_CLICK` runs inside the foreground launcher, so the grid opens at once. `startGrid()` exists only as a fallback.
-3. **Home pressed while Amazon's home is already in front changes no window.** That press cannot be told apart from browsing. This is a known limit, and there is no event to use. Users get back to the grid with the launcher's apps icon or by opening any app. The README documents this under "Getting back from Amazon's home", so keep it in sync if the behaviour changes.
+3. **Home pressed while Amazon's home is already in front changes no window.** Only `HOME_PRESSED` reports it. `HomeShortcutActivity` sends a Home intent of its own to open Amazon's home, so it sets `skipHomePressed` and `suppressUntil`, and the receiver ignores exactly that one broadcast.
 4. **The launcher enlarges the apps button on click and shrinks it only when focus leaves it.** `clickNode()` focuses the button, clicks it, then hands focus back to the previous node after `FOCUS_BACK_MS` (250 ms). Without that, Amazon's home showed a stuck, enlarged button the next time. `restoreFocus()` finishes the job if Amazon's home is shown again later.
-5. **Amazon's settings page lives inside the launcher.** Its marker is `id/settings_search_input`. Back from a settings screen (package `com.amazon.tv.settings*`) also lands on `HomeActivity`, so the service skips the redirect when the previous window was settings or the settings page is visible.
+5. **Amazon's settings page lives inside the launcher.** Settings from the long-press Home menu opens `MainSettingsActivity`, which the class check skips. The settings page can also show inside `HomeActivity`, with the marker `id/settings_search_input`. Back from a settings screen (package `com.amazon.tv.settings*`) sends no Home intent. The service skips window-event redirects when the previous window was settings or the settings page is visible. A redirect started by `HOME_PRESSED` (`homeKey`) ignores the settings page, because the user really pressed Home.
 6. **Amazon's home can report itself twice right after a redirect.** `DEBOUNCE_MS` (1.5 s) ignores the echo. Without it, the overlay would cover a screen with no redirect behind it.
 7. **The grid's store link screen comes first.** When `com.amazon.venezia` comes up, the service waits for `AppsGridLauncherActivity` itself, then removes the overlay after `COVER_GRACE_MS`.
-8. **Sleep.** About 10 minutes after the screen turns off, Fire OS (`HomeLauncherCallback` in system_server) launches Home while the screen is still off. The service redirects then too, so the stick wakes on the grid.
+8. **Sleep.** About 10 minutes after the screen turns off, Fire OS (`HomeLauncherCallback` in system_server) launches Home while the screen is still off. The service redirects then too, so the stick wakes on the grid. While the TV is in HDMI standby, window queries can block for seconds. `STALE_MS` lets a new trigger restart a check that is stuck, instead of joining it.
 9. **The overlay runs on its own `HandlerThread`.** Looking for the button blocks the main thread while Amazon's home is still loading. When the overlay was drawn from the main thread, Amazon's home showed for up to half a second first. `COVER_MAX_MS` (4 s) makes the overlay fail open.
+10. **Boot.** At boot the launcher is created, not sent a Home intent, so there is no broadcast. The service may also connect after the first window event. `onServiceConnected` therefore polls (`bootCheck`) for Amazon's home when the device has been up for less than `BOOT_WINDOW_MS`, and redirects once.
+11. **The grid caches tile names.** "Your Apps & Games" shows the application label, which is `@string/home_label` ("Amazon Home" / "Início"). The service keeps `@string/app_name` in accessibility settings. The grid stores the label at install time, so only an uninstall and reinstall refresh it. `adb install -r` does not.
 
 ## Invariants
 
@@ -78,18 +82,25 @@ adb shell dumpsys window | grep mCurrentFocus                  # expect com.amaz
 adb shell uiautomator dump /sdcard/w.xml && adb pull /sdcard/w.xml
 adb exec-out screencap -p > screen.png
 
+# What the service decided (tag MinimalFireStick: Home pressed, clicked, fallback, settings page: stay, boot)
+adb logcat -s MinimalFireStick:I
+
 # Window and activity history
 adb logcat -b events | grep -E "am_new_intent|am_resume_activity|wm_task_moved"
 ```
+
+Shell-started intents land within the ~5 second app-switch window after a Home press and get delayed. In tests, wait at least 6 seconds after Home before `am start`, or the results will mislead you.
 
 Scenarios to check after any change to `HomeToAppsService`:
 
 1. From any app, Home opens the grid with no flash of Amazon's home.
 2. Home again from the grid opens the grid.
 3. The "Amazon Home" tile opens Amazon's home and stays there.
-4. Settings, then a settings screen, then Back stays in Settings.
-5. The apps button is not left enlarged on Amazon's home afterwards.
-6. Turning off the service (`settings put secure enabled_accessibility_services ""`) returns the stick to stock behaviour.
+4. Home pressed on Amazon's home opens the grid.
+5. Settings (long-press Home › Settings), then a settings screen, then Back stays in Settings. Home from there opens the grid.
+6. The apps button is not left enlarged on Amazon's home afterwards.
+7. `adb reboot`: the stick comes up on the grid.
+8. Turning off the service (`settings put secure enabled_accessibility_services ""`) returns the stick to stock behaviour.
 
 ## Porting to another Fire OS version or model
 
@@ -105,7 +116,8 @@ Put version-specific values side by side instead of replacing them, so that one 
 
 ## Known gaps (good first contributions)
 
-- After a reboot, the service can bind after Amazon's home is already in front, so there is no redirect until the user opens the grid or any app. Pressing Home there does nothing, see fact 3.
+- Prime Video (`com.amazon.firebat`) never shows in "Your Apps & Games", even when installed. Amazon only links to it from its home.
+- The first Home press right after a system language change can be missed while the service reconnects.
 - Fire OS 8 and Fire TV Cube or 4K models are untested.
 - There are no prebuilt APKs in Releases yet.
 

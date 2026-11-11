@@ -1,14 +1,18 @@
 package local.homeapps;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -22,8 +26,11 @@ import java.util.List;
  * activity starts after Home. If the button is not found in time, it starts the grid directly.
  *
  * Fire OS hands neither the Home key nor its "homekey" broadcast to third-party apps, and Home pressed while
- * Amazon's home is already in front changes no window, so that one press cannot be told from browsing.
- * HomeShortcutActivity opens Amazon's home on purpose; it stays until another app comes to the front.
+ * Amazon's home is already in front changes no window. Amazon's launcher, though, sends an unprotected
+ * HOME_PRESSED broadcast for every Home intent it receives, so that press is caught there (idea from
+ * FireFrame, github.com/dyascj/FireFrame). At boot the launcher is created rather than sent a Home intent, so
+ * no broadcast comes: the service checks for Amazon's home itself once it connects.
+ * HomeShortcutActivity opens Amazon's home on purpose; it stays until Home is pressed or another app comes up.
  *
  * While a redirect runs, an overlay in the grid's background colour covers Amazon's home so it does not
  * flash. It is removed once the grid is in front, when the redirect is abandoned, or after a few seconds.
@@ -31,7 +38,10 @@ import java.util.List;
  * still loading, and drawing the overlay there let the home show for up to half a second first.
  */
 public class HomeToAppsService extends AccessibilityService {
+    private static final String TAG = "MinimalFireStick";
     private static final String LAUNCHER = "com.amazon.tv.launcher";
+    /** Sent by Amazon's launcher, without a permission, whenever it receives a Home intent. */
+    private static final String HOME_PRESSED = "com.amazon.tv.launcher.HOME_PRESSED";
     private static final String HOME_CLASS = LAUNCHER + ".ui.HomeActivity";
     private static final String APPS_BUTTON = "com.amazon.tv.launcher:id/nav_bar_app_overflow";
     /** Settings page inside Amazon's home (also reached from the Home long-press menu): stay on it. */
@@ -48,14 +58,26 @@ public class HomeToAppsService extends AccessibilityService {
     private static final long COVER_GRACE_MS = 250;
     private static final long RETRY_MS = 100;
     private static final int MAX_TRIES = 20;
+    /**
+     * A check running longer than this is stuck (window queries can block for seconds while the TV is in HDMI
+     * standby), so a new trigger restarts it instead of joining it.
+     */
+    private static final long STALE_MS = 4000;
     /** Tries to wait before clicking, so a settings page that is still drawing gets the chance to show. */
     private static final int SETTLE_TRIES = 2;
     private static final long DEBOUNCE_MS = 1500;
     /** After clicking the apps button: long enough for the launcher to enlarge it, short of the grid opening. */
     private static final long FOCUS_BACK_MS = 250;
+    /** A service connecting this soon after boot looks for Amazon's home itself. */
+    private static final long BOOT_WINDOW_MS = 180_000;
+    private static final long BOOT_POLL_MS = 500;
+    /** How long to wait for Amazon's home to come up after boot. */
+    private static final int BOOT_POLLS = 120;
 
     /** Set by HomeShortcutActivity: Amazon's home opening on request is not a Home press. */
     static volatile long suppressUntil;
+    /** Set by HomeShortcutActivity: its own Home intent makes the launcher send one HOME_PRESSED to ignore. */
+    static volatile boolean skipHomePressed;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastRedirect;
@@ -66,6 +88,10 @@ public class HomeToAppsService extends AccessibilityService {
     private boolean fallback;
     /** A check is scheduled; another trigger while it runs does not start a second one. */
     private boolean pending;
+    private long pendingSince;
+    /** The running check was started by a real Home press, so a settings page still showing does not stop it. */
+    private boolean homeKey;
+    private int bootPolls;
     /**
      * What had focus on Amazon's home before the apps button was clicked, while focus is still left on the
      * button; null once handed back.
@@ -105,12 +131,14 @@ public class HomeToAppsService extends AccessibilityService {
     private final Runnable clickAppsButton = new Runnable() {
         @Override
         public void run() {
-            if (visible(SETTINGS_PAGE)) {
+            if (!homeKey && visible(SETTINGS_PAGE)) {
+                Log.i(TAG, "settings page: stay");
                 pending = false;
                 uncoverAfter(0);
                 return;
             }
             if (tries >= SETTLE_TRIES && clickNode()) {
+                Log.i(TAG, "clicked the apps button after " + tries + " tries");
                 redirected();
                 return;
             }
@@ -120,11 +148,46 @@ public class HomeToAppsService extends AccessibilityService {
             }
             pending = false;
             if (fallback) {
+                Log.i(TAG, "apps button not found: starting the grid");
                 startGrid();
                 redirected();
             } else {
                 uncoverAfter(0);
             }
+        }
+    };
+
+    private final BroadcastReceiver homePressed = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (SystemClock.uptimeMillis() >= suppressUntil) {
+                skipHomePressed = false;
+            } else if (skipHomePressed) {
+                skipHomePressed = false;
+                Log.i(TAG, "Home intent from the Amazon Home tile: stay");
+                return;
+            }
+            Log.i(TAG, "Home pressed");
+            coverScreen();
+            redirect(true, true);
+        }
+    };
+
+    /** After boot: wait for Amazon's home to come up, then redirect once. */
+    private final Runnable bootCheck = new Runnable() {
+        @Override
+        public void run() {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            CharSequence pkg = root == null ? null : root.getPackageName();
+            if (pkg != null && LAUNCHER.equals(pkg.toString())) {
+                if (SystemClock.uptimeMillis() >= suppressUntil) {
+                    Log.i(TAG, "boot: Amazon's home is up");
+                    coverScreen();
+                    redirect(true, false);
+                }
+                return;
+            }
+            if (++bootPolls < BOOT_POLLS) handler.postDelayed(this, BOOT_POLL_MS);
         }
     };
 
@@ -134,10 +197,22 @@ public class HomeToAppsService extends AccessibilityService {
         coverThread = new HandlerThread("cover", Process.THREAD_PRIORITY_DISPLAY);
         coverThread.start();
         coverHandler = new Handler(coverThread.getLooper());
+        registerReceiver(homePressed, new IntentFilter(HOME_PRESSED));
+    }
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) {
+            bootPolls = 0;
+            handler.post(bootCheck);
+        }
     }
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(homePressed);
+        handler.removeCallbacksAndMessages(null);
         coverHandler.removeCallbacksAndMessages(null);
         coverHandler.post(removeCover);
         coverThread.quitSafely();
@@ -184,18 +259,26 @@ public class HomeToAppsService extends AccessibilityService {
         // Amazon's home can report itself again right after a redirect; that is not a new Home press, and
         // covering it would leave a dark screen with no redirect behind it.
         if (SystemClock.uptimeMillis() - lastRedirect < DEBOUNCE_MS) return;
+        handler.removeCallbacks(bootCheck);
         coverScreen();
-        redirect(true);
+        redirect(true, false);
     }
 
-    private void redirect(boolean allowFallback) {
+    private void redirect(boolean allowFallback, boolean fromHomeKey) {
+        long now = SystemClock.uptimeMillis();
         if (pending) {
-            fallback |= allowFallback;
-            return;
+            if (now - pendingSince < STALE_MS) {
+                fallback |= allowFallback;
+                homeKey |= fromHomeKey;
+                return;
+            }
+            Log.i(TAG, "previous check stuck: restarting");
         }
         pending = true;
+        pendingSince = now;
         tries = 0;
         fallback = allowFallback;
+        homeKey = fromHomeKey;
         handler.removeCallbacks(clickAppsButton);
         handler.post(clickAppsButton);
     }

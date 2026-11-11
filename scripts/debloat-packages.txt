@@ -30,6 +30,9 @@ com.amazon.wha.mediabrowserservice
 com.amazon.whad
 com.amazon.whasettings
 
+# Prime Video app; keep it if you watch Prime Video
+com.amazon.firebat
+
 # Live TV tab (antenna/channel guide); keep it if you use Live TV
 com.amazon.tv.livetv
 
@@ -44,7 +47,6 @@ com.amazon.kso.blackbird
 com.amazon.livedeviceservice
 com.amazon.privacypassservice
 com.amazon.ceviche
-com.amazon.firebat
 com.amazon.naatyam
 com.amazon.providers.contentsupport
 com.amazon.tv.website_launcher

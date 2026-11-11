@@ -6,8 +6,9 @@ Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **
 |:---:|:---:|
 | ![Amazon's Fire TV home screen with a full-width ad, trailers and recommended shows](docs/before.png) | ![The "Your Apps & Games" grid showing only the installed apps on a dark background](docs/after.png) |
 
-- **Home opens your apps.** This also applies when the stick wakes up from sleep, since Fire OS sends it Home after a while asleep.
-- **Amazon's home is still there when you need it.** An **Amazon Home** tile in the grid opens it, for search, profiles and so on. It stays until you leave it (see [Getting back from Amazon's home](#getting-back-from-amazons-home)).
+- **Home always opens your apps.** This works from any app, from Settings, and even from Amazon's own home screen.
+- **It starts there too.** After a reboot, and when the stick wakes up from sleep, you land on your apps.
+- **Amazon's home is still there when you need it.** An **Amazon Home** tile in the grid opens it, for search, profiles and so on. It stays until you press Home or open an app.
 - **Settings work as usual.** Back from a settings screen stays in Settings.
 - **Optional debloat.** A script turns off Amazon background apps (telemetry, ads, tutorials, extra Alexa features), and another one turns them back on.
 - **No internet permission and no data collection.** The app only watches which window is in front.
@@ -16,7 +17,13 @@ The app shows in Portuguese on devices set to Portuguese and in English everywhe
 
 ## How it works
 
-Fire OS does not let third-party apps replace the launcher or catch the Home key. This app runs an accessibility service that waits for Amazon's home window instead. When that window appears, the service:
+Fire OS does not let third-party apps replace the launcher or catch the Home key. This app runs an accessibility service instead. It reacts to three signals:
+
+- Amazon's home window coming to the front.
+- The `com.amazon.tv.launcher.HOME_PRESSED` broadcast that Amazon's launcher sends for every Home press, even when its home is already on screen. This idea comes from [FireFrame](https://github.com/dyascj/FireFrame).
+- Right after boot, Amazon's home being up.
+
+Then the service:
 
 1. Covers the screen with a dark overlay that matches the grid's background, so Amazon's home does not flash.
 2. Clicks the launcher's own "all apps" button. The grid opens right away this way. Starting it directly would hit the delay of about 5 seconds that Fire OS puts on app starts right after Home.
@@ -54,22 +61,17 @@ scripts/debloat.sh <fire-tv-ip>    # disable
 scripts/restore.sh <fire-tv-ip>    # turn everything back on
 ```
 
-The debloat script disables the 36 Amazon background apps listed in [`scripts/debloat-packages.txt`](scripts/debloat-packages.txt). They cover telemetry, ad ID, tutorials, extra Alexa features, the Live TV tab and more. The script uses `pm disable-user`, so nothing is uninstalled and a factory reset also brings everything back. Read the list first and delete any line you want to keep. For example, keep `com.amazon.tv.livetv` if you use Live TV.
-
-## Getting back from Amazon's home
-
-While Amazon's home is on screen, pressing **Home** does nothing. Fire OS changes no window for that press, so the app has nothing to react to. To get back to your apps, do one of these once:
-
-- Select the **apps icon** in Amazon's top bar, the squares next to the gear. It opens the grid.
-- Open any app.
-
-From then on, Home opens the grid again as usual. You only need to do this after you chose the **Amazon Home** tile, or in the rare cases where the stick lands on Amazon's home by itself, for example right after a reboot.
+The debloat script disables the 36 Amazon background apps listed in [`scripts/debloat-packages.txt`](scripts/debloat-packages.txt). They cover telemetry, ad ID, tutorials, extra Alexa features, the Live TV tab, Prime Video and more. The script uses `pm disable-user`, so nothing is uninstalled and a factory reset also brings everything back. Read the list first and delete any line you want to keep. For example, keep `com.amazon.firebat` if you watch Prime Video, and `com.amazon.tv.livetv` if you use Live TV.
 
 ## Known issues
 
-- Home does nothing while Amazon's home is already on screen. See [Getting back from Amazon's home](#getting-back-from-amazons-home).
-- After a reboot, the stick can start on Amazon's home instead of the grid. Get out of it the same way: use the apps icon or open any app.
-- Profiles: Fire OS 7 does not ask "Who's watching?" by itself. To switch profiles, use the **Amazon Home** tile and pick the avatar.
+- **Prime Video is not in the grid.** Amazon leaves Prime Video out of "Your Apps & Games" even when it is installed and only links to it from its own home screen. Use the **Amazon Home** tile to reach it.
+- **Profiles.** Fire OS 7 does not ask "Who's watching?" by itself. To switch profiles, use the **Amazon Home** tile and pick the avatar.
+- **Tile name after a language change.** The grid keeps the tile name from install time. Reinstall the app to update it.
+
+## Related projects
+
+- [FireFrame](https://github.com/dyascj/FireFrame) replaces Amazon's home with its own home screen: a wallpaper, a clock and a dock of your apps. Pick it if you want a designed home screen. Pick this project if you want the smallest change, built on Amazon's own apps grid.
 
 ## Disclaimer
 
