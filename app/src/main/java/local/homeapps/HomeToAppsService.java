@@ -5,7 +5,9 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.WindowManager;
@@ -25,6 +27,8 @@ import java.util.List;
  *
  * While a redirect runs, an overlay in the grid's background colour covers Amazon's home so it does not
  * flash. It is removed once the grid is in front, when the redirect is abandoned, or after a few seconds.
+ * The overlay lives on its own thread: looking for the button blocks the main thread while Amazon's home is
+ * still loading, and drawing the overlay there let the home show for up to half a second first.
  */
 public class HomeToAppsService extends AccessibilityService {
     private static final String LAUNCHER = "com.amazon.tv.launcher";
@@ -38,10 +42,10 @@ public class HomeToAppsService extends AccessibilityService {
             new ComponentName("com.amazon.venezia", "com.amazon.venezia.grid.AppsGridLauncherActivity");
     /** The grid's own background, so the cover blends into it. */
     private static final int COVER_COLOR = 0xFF1A1A1A;
-    /** Fail-open: the cover never stays longer than this. */
-    private static final long COVER_MAX_MS = 3000;
-    /** Let the grid draw its first frame before uncovering. */
-    private static final long COVER_GRACE_MS = 150;
+    /** Fail-open: the cover never stays longer than this. On a busy stick the grid can take over 3 s. */
+    private static final long COVER_MAX_MS = 4000;
+    /** The grid reports itself about 60 ms before its first frame; leave room for a slower one. */
+    private static final long COVER_GRACE_MS = 250;
     private static final long RETRY_MS = 100;
     private static final int MAX_TRIES = 20;
     /** Tries to wait before clicking, so a settings page that is still drawing gets the chance to show. */
@@ -60,48 +64,13 @@ public class HomeToAppsService extends AccessibilityService {
     private boolean fallback;
     /** A check is scheduled; another trigger while it runs does not start a second one. */
     private boolean pending;
+
+    private HandlerThread coverThread;
+    private Handler coverHandler;
+    /** Only touched on the cover thread. */
     private View cover;
 
-    private final Runnable uncover = new Runnable() {
-        @Override
-        public void run() {
-            handler.removeCallbacks(this);
-            if (cover != null) {
-                getSystemService(WindowManager.class).removeView(cover);
-                cover = null;
-            }
-        }
-    };
-
-    private final Runnable clickAppsButton = new Runnable() {
-        @Override
-        public void run() {
-            if (visible(SETTINGS_PAGE)) {
-                pending = false;
-                uncover.run();
-                return;
-            }
-            if (tries >= SETTLE_TRIES && clickNode()) {
-                redirected();
-                return;
-            }
-            if (++tries < MAX_TRIES) {
-                handler.postDelayed(this, RETRY_MS);
-                return;
-            }
-            pending = false;
-            if (fallback) {
-                startGrid();
-                redirected();
-            } else {
-                uncover.run();
-            }
-        }
-    };
-
-    private void coverScreen() {
-        handler.removeCallbacks(uncover);
-        handler.postDelayed(uncover, COVER_MAX_MS);
+    private final Runnable showCover = () -> {
         if (cover != null) return;
         View view = new View(this);
         view.setBackgroundColor(COVER_COLOR);
@@ -117,6 +86,66 @@ public class HomeToAppsService extends AccessibilityService {
         } catch (RuntimeException ignored) {
             // No overlay: the redirect still works, Amazon's home just shows for a moment.
         }
+    };
+
+    private final Runnable removeCover = () -> {
+        if (cover != null) {
+            getSystemService(WindowManager.class).removeView(cover);
+            cover = null;
+        }
+    };
+
+    private final Runnable clickAppsButton = new Runnable() {
+        @Override
+        public void run() {
+            if (visible(SETTINGS_PAGE)) {
+                pending = false;
+                uncoverAfter(0);
+                return;
+            }
+            if (tries >= SETTLE_TRIES && clickNode()) {
+                redirected();
+                return;
+            }
+            if (++tries < MAX_TRIES) {
+                handler.postDelayed(this, RETRY_MS);
+                return;
+            }
+            pending = false;
+            if (fallback) {
+                startGrid();
+                redirected();
+            } else {
+                uncoverAfter(0);
+            }
+        }
+    };
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        coverThread = new HandlerThread("cover", Process.THREAD_PRIORITY_DISPLAY);
+        coverThread.start();
+        coverHandler = new Handler(coverThread.getLooper());
+    }
+
+    @Override
+    public void onDestroy() {
+        coverHandler.removeCallbacksAndMessages(null);
+        coverHandler.post(removeCover);
+        coverThread.quitSafely();
+        super.onDestroy();
+    }
+
+    private void coverScreen() {
+        coverHandler.removeCallbacks(removeCover);
+        coverHandler.post(showCover);
+        coverHandler.postDelayed(removeCover, COVER_MAX_MS);
+    }
+
+    private void uncoverAfter(long delayMs) {
+        coverHandler.removeCallbacks(removeCover);
+        coverHandler.postDelayed(removeCover, delayMs);
     }
 
     /** Only a redirect that happened starts the debounce; settings-page checks that stayed put do not. */
@@ -132,22 +161,24 @@ public class HomeToAppsService extends AccessibilityService {
         String pkg = pkgName == null ? "" : pkgName.toString();
         String previous = lastPackage;
         lastPackage = pkg;
+        CharSequence cls = event.getClassName();
         if (APPS_GRID.getPackageName().equals(pkg)) {
-            // The grid is up: uncover once it has drawn.
-            handler.removeCallbacks(uncover);
-            handler.postDelayed(uncover, COVER_GRACE_MS);
+            // The store's link screen comes first, with Amazon's home still showing behind it: wait for the
+            // grid itself, then uncover once it has drawn.
+            if (cls != null && APPS_GRID.getClassName().equals(cls.toString())) uncoverAfter(COVER_GRACE_MS);
             return;
         }
-        CharSequence cls = event.getClassName();
         if (!LAUNCHER.equals(pkg) || cls == null || !cls.toString().startsWith(HOME_CLASS)) return;
         // Back from a settings screen lands on the settings page; Amazon's home opened on request stays.
         if (SystemClock.uptimeMillis() < suppressUntil || previous.startsWith(SETTINGS_PACKAGE)) return;
+        // Amazon's home can report itself again right after a redirect; that is not a new Home press, and
+        // covering it would leave a dark screen with no redirect behind it.
+        if (SystemClock.uptimeMillis() - lastRedirect < DEBOUNCE_MS) return;
         coverScreen();
         redirect(true);
     }
 
     private void redirect(boolean allowFallback) {
-        if (SystemClock.uptimeMillis() - lastRedirect < DEBOUNCE_MS) return;
         if (pending) {
             fallback |= allowFallback;
             return;
@@ -192,6 +223,6 @@ public class HomeToAppsService extends AccessibilityService {
     public void onInterrupt() {
         handler.removeCallbacks(clickAppsButton);
         pending = false;
-        uncover.run();
+        uncoverAfter(0);
     }
 }
