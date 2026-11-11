@@ -7,7 +7,7 @@ Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **
 | ![Amazon's Fire TV home screen with a full-width ad, trailers and recommended shows](docs/before.png) | ![The "Your Apps & Games" grid showing only the installed apps on a dark background](docs/after.png) |
 
 - **Home opens your apps.** This also applies when the stick wakes up from sleep, since Fire OS sends it Home after a while asleep.
-- **Amazon's home is still there when you need it.** An **Amazon Home** tile in the grid opens it, for search, profiles and so on. It stays until you open another app.
+- **Amazon's home is still there when you need it.** An **Amazon Home** tile in the grid opens it, for search, profiles and so on. It stays until you leave it (see [Getting back from Amazon's home](#getting-back-from-amazons-home)).
 - **Settings work as usual.** Back from a settings screen stays in Settings.
 - **Optional debloat.** A script turns off Amazon background apps (telemetry, ads, tutorials, extra Alexa features), and another one turns them back on.
 - **No internet permission and no data collection.** The app only watches which window is in front.
@@ -56,9 +56,19 @@ scripts/restore.sh <fire-tv-ip>    # turn everything back on
 
 The debloat script disables the 36 Amazon background apps listed in [`scripts/debloat-packages.txt`](scripts/debloat-packages.txt). They cover telemetry, ad ID, tutorials, extra Alexa features, the Live TV tab and more. The script uses `pm disable-user`, so nothing is uninstalled and a factory reset also brings everything back. Read the list first and delete any line you want to keep. For example, keep `com.amazon.tv.livetv` if you use Live TV.
 
+## Getting back from Amazon's home
+
+While Amazon's home is on screen, pressing **Home** does nothing. Fire OS changes no window for that press, so the app has nothing to react to. To get back to your apps, do one of these once:
+
+- Select the **apps icon** in Amazon's top bar, the squares next to the gear. It opens the grid.
+- Open any app.
+
+From then on, Home opens the grid again as usual. You only need to do this after you chose the **Amazon Home** tile, or in the rare cases where the stick lands on Amazon's home by itself, for example right after a reboot.
+
 ## Known issues
 
-- After a reboot, Amazon's home can stay on screen until you press Home once.
+- Home does nothing while Amazon's home is already on screen. See [Getting back from Amazon's home](#getting-back-from-amazons-home).
+- After a reboot, the stick can start on Amazon's home instead of the grid. Get out of it the same way: use the apps icon or open any app.
 - Profiles: Fire OS 7 does not ask "Who's watching?" by itself. To switch profiles, use the **Amazon Home** tile and pick the avatar.
 
 ## Disclaimer

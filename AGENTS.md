@@ -44,7 +44,7 @@ Each of these was found the hard way. Do not "simplify" them away without re-tes
 
 1. **Third-party apps cannot see Home.** Fire OS does not deliver `KEYCODE_HOME` to accessibility services, does not send `ACTION_CLOSE_SYSTEM_DIALOGS` "homekey" to third-party apps, and ignores third-party `CATEGORY_HOME` launchers. The only usable signal is `TYPE_WINDOW_STATE_CHANGED` for `com.amazon.tv.launcher` with a class name that starts with `com.amazon.tv.launcher.ui.HomeActivity`. On Fire OS 7 the class is `HomeActivity_vNext`, which is why the code uses `startsWith`.
 2. **Starting an activity right after Home is delayed about 5 seconds.** This is Android's app-switch protection (`stopAppSwitches`, `APP_SWITCH_DELAY_TIME`). A plain `startActivity` from the service lands about 5 seconds late. Clicking the launcher's own button (`com.amazon.tv.launcher:id/nav_bar_app_overflow`) through `AccessibilityNodeInfo.ACTION_CLICK` runs inside the foreground launcher, so the grid opens at once. `startGrid()` exists only as a fallback.
-3. **Home pressed while Amazon's home is already in front changes no window.** That press cannot be told apart from browsing. This is a known limit, and there is no event to use.
+3. **Home pressed while Amazon's home is already in front changes no window.** That press cannot be told apart from browsing. This is a known limit, and there is no event to use. Users get back to the grid with the launcher's apps icon or by opening any app. The README documents this under "Getting back from Amazon's home", so keep it in sync if the behaviour changes.
 4. **The launcher enlarges the apps button on click and shrinks it only when focus leaves it.** `clickNode()` focuses the button, clicks it, then hands focus back to the previous node after `FOCUS_BACK_MS` (250 ms). Without that, Amazon's home showed a stuck, enlarged button the next time. `restoreFocus()` finishes the job if Amazon's home is shown again later.
 5. **Amazon's settings page lives inside the launcher.** Its marker is `id/settings_search_input`. Back from a settings screen (package `com.amazon.tv.settings*`) also lands on `HomeActivity`, so the service skips the redirect when the previous window was settings or the settings page is visible.
 6. **Amazon's home can report itself twice right after a redirect.** `DEBOUNCE_MS` (1.5 s) ignores the echo. Without it, the overlay would cover a screen with no redirect behind it.
@@ -105,7 +105,7 @@ Put version-specific values side by side instead of replacing them, so that one 
 
 ## Known gaps (good first contributions)
 
-- After a reboot, the service can bind after Amazon's home is already in front, so there is no redirect until the next Home.
+- After a reboot, the service can bind after Amazon's home is already in front, so there is no redirect until the user opens the grid or any app. Pressing Home there does nothing, see fact 3.
 - Fire OS 8 and Fire TV Cube or 4K models are untested.
 - There are no prebuilt APKs in Releases yet.
 
