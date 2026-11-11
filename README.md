@@ -1,6 +1,6 @@
 # Minimal Fire Stick
 
-Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **Your Apps & Games**, just your apps on a dark grid, instead of Amazon's home screen full of ads, trailers and recommendations. No root needed.
+Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **Your Apps & Games**, just your apps on a dark grid, instead of Amazon's home screen full of ads, trailers and recommendations. No root and no custom launcher: it uses the apps grid Amazon already ships.
 
 | Before: Amazon's home | After: press Home |
 |:---:|:---:|
@@ -14,6 +14,18 @@ Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **
 - **No internet permission and no data collection.** The app only watches which window is in front.
 
 The app shows in Portuguese on devices set to Portuguese and in English everywhere else.
+
+## Why not a custom launcher?
+
+Most guides replace Amazon's home with a third-party launcher. This project does the opposite on purpose. It keeps Amazon's own launcher and its own "Your Apps & Games" grid, and only changes where Home takes you. That keeps things minimal in every sense:
+
+- **Nothing new to learn.** The grid is Amazon's: same look and same remote menu to move or remove apps. Everyone at home already knows it.
+- **No exploits, nothing to fight.** Custom launchers on Fire TV rely on tricks Amazon keeps patching, and some of them block system updates or sleep. This app uses a normal accessibility service. Fire OS updates, sleep, profiles, Alexa and Settings all keep working as Amazon designed them.
+- **Tiny.** The app is about 20 KB, has no screens of its own, and has no internet permission. A custom launcher keeps a whole home screen in memory on a stick with 1 GB of RAM.
+- **Fails safe.** If Amazon changes something, the worst case is that you see Amazon's home again.
+- **Easy to undo.** Uninstall one app and the stick is stock again.
+
+If you would rather have a designed home screen, with wallpapers and a dock, see [FireFrame](https://github.com/dyascj/FireFrame).
 
 ## How it works
 
