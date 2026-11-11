@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- No INTERNET permission: the service only watches Amazon's home window and opens the apps grid. -->
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_home"
+        android:banner="@drawable/banner_home"
+        android:allowBackup="false">
+        <service
+            android:name=".HomeToAppsService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/home_to_apps_service" />
+        </service>
+        <activity
+            android:name=".HomeShortcutActivity"
+            android:exported="true"
+            android:banner="@drawable/banner_home"
+            android:icon="@mipmap/ic_home"
+            android:label="@string/home_label"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:noHistory="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
