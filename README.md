@@ -2,6 +2,10 @@
 
 Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **Your Apps & Games**, just your apps on a dark grid, instead of Amazon's home screen full of ads, trailers and recommendations. No root needed.
 
+| Before: Amazon's home | After: press Home |
+|:---:|:---:|
+| ![Amazon's Fire TV home screen with a full-width ad, trailers and recommended shows](docs/before.png) | ![The "Your Apps & Games" grid showing only the installed apps on a dark background](docs/after.png) |
+
 - **Home opens your apps.** This also applies when the stick wakes up from sleep, since Fire OS sends it Home after a while asleep.
 - **Amazon's home is still there when you need it.** An **Amazon Home** tile in the grid opens it, for search, profiles and so on. It stays until you open another app.
 - **Settings work as usual.** Back from a settings screen stays in Settings.
