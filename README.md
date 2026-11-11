@@ -1,10 +1,11 @@
-# Fire TV Apps Home
+# Minimal Fire Stick
 
-Makes the **Home** button on a Fire TV open **Your Apps & Games**, the plain grid of your installed apps, instead of Amazon's home screen full of ads and recommendations.
+Turn a Fire TV Stick into a clean, minimal TV box. Press **Home** and you get **Your Apps & Games**, just your apps on a dark grid, instead of Amazon's home screen full of ads, trailers and recommendations. No root needed.
 
 - **Home opens your apps.** This also applies when the stick wakes up from sleep, since Fire OS sends it Home after a while asleep.
 - **Amazon's home is still there when you need it.** An **Amazon Home** tile in the grid opens it, for search, profiles and so on. It stays until you open another app.
 - **Settings work as usual.** Back from a settings screen stays in Settings.
+- **Optional debloat.** A script turns off Amazon background apps (telemetry, ads, tutorials, extra Alexa features), and another one turns them back on.
 - **No internet permission and no data collection.** The app only watches which window is in front.
 
 The app shows in Portuguese on devices set to Portuguese and in English everywhere else.
