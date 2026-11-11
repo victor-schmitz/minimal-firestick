@@ -253,12 +253,17 @@ public class HomeToAppsService extends AccessibilityService {
         if (!LAUNCHER.equals(pkg) || cls == null || !cls.toString().startsWith(HOME_CLASS)) return;
         // Back from a settings screen lands on the settings page; Amazon's home opened on request stays.
         if (SystemClock.uptimeMillis() < suppressUntil || previous.startsWith(SETTINGS_PACKAGE)) {
+            Log.i(TAG, "Amazon's home after " + previous + ": stay");
             restoreFocus();
             return;
         }
         // Amazon's home can report itself again right after a redirect; that is not a new Home press, and
         // covering it would leave a dark screen with no redirect behind it.
-        if (SystemClock.uptimeMillis() - lastRedirect < DEBOUNCE_MS) return;
+        if (SystemClock.uptimeMillis() - lastRedirect < DEBOUNCE_MS) {
+            Log.i(TAG, "Amazon's home again right after a redirect: ignored");
+            return;
+        }
+        Log.i(TAG, "Amazon's home came up after " + previous);
         handler.removeCallbacks(bootCheck);
         coverScreen();
         redirect(true, false);
